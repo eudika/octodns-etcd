@@ -1,0 +1,17 @@
+# Virtual env and caches
+.venv/
+venv/
+.env/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+__pycache__/
+
+# Build / install
+dist/
+build/
+*.egg-info/
+*.egg
+
+# uv
+uv.lock
