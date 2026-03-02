@@ -165,6 +165,29 @@ class TestCreateNewRecords:
         assert count == 0
         assert client.data == {}
 
+    def test_apply_create_two_values_when_only_slash_one_exists_appends_after(
+        self, provider: EtcdProvider, client: DictEtcdClient, zone: Zone
+    ) -> None:
+        """When only ../app/1 exists, adding 2 records appends at /2 and /3."""
+        client.data["/skydns/com/example/app/1"] = {
+            "host": "192.168.1.1",
+            "ttl": 300,
+        }
+        record = Record.new(
+            zone,
+            "app",
+            {"type": "A", "ttl": 300, "values": ["10.0.0.1", "10.0.0.2"]},
+        )
+
+        count = provider._create_new_records(record)
+
+        assert count == 2
+        assert client.data == {
+            "/skydns/com/example/app/1": {"host": "192.168.1.1", "ttl": 300},
+            "/skydns/com/example/app/2": {"host": "10.0.0.1", "ttl": 300},
+            "/skydns/com/example/app/3": {"host": "10.0.0.2", "ttl": 300},
+        }
+
 
 class TestApply:
     """Tests for _apply."""

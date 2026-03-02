@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections import defaultdict
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
@@ -316,17 +317,12 @@ class EtcdProvider(BaseProvider):
             self._client.delete(base_key_bytes)
 
     def _next_seq_for_name(self, base_key: str) -> int:
-        """Return next free index under base_key; bare key counts as 0, base_key/N as N."""
+        """Return next index for appending under base_key; bare key counts as 0, base_key/N as N."""
         used: set[int] = set()
         for _, meta in self._client.get_by_prefix(base_key.encode("utf-8")):
             key = meta.key.decode("utf-8")
             if key == base_key:
                 used.add(0)
-            elif key.startswith(base_key + "/"):
-                suffix = key[len(base_key) + 1 :].split("/")[0]
-                if suffix.isdigit():
-                    used.add(int(suffix))
-        idx = 0
-        while idx in used:
-            idx += 1
-        return idx
+            elif (m := re.match(re.escape(base_key) + r"/(\d+)", key)):
+                used.add(int(m.group(1)))
+        return max(used) + 1 if used else 0
