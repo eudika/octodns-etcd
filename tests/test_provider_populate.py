@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from pathlib import PurePosixPath
-
 import pytest
 from octodns.zone import Zone
 
 from octodns_etcd.provider import EtcdProvider, _extract_record_name
 from tests.conftest import DictEtcdClient, EtcdKvMeta
 
-PREFIX = PurePosixPath("/skydns")
+PREFIX = "/skydns"
 ONE_TO_THIRTY = "1/2/3/4/5/6/7/8/9/a/b/c/d/e/f/0/1/2/3/4/5/6/7/8/9/a/b/c/d/e"
 
 
@@ -70,8 +68,7 @@ class TestExtractRecordName:
     def test_key_equals_zone_path_returns_empty(
         self, zone_path_str, key, expected
     ) -> None:
-        zone_path = PurePosixPath(zone_path_str)
-        assert _extract_record_name(key, zone_path, PREFIX) == expected
+        assert _extract_record_name(key, zone_path_str, PREFIX) == expected
 
 
 class TestEtcdProvider:

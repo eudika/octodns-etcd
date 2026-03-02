@@ -37,19 +37,10 @@ __all__ = ["EtcdProvider"]
 DEFAULT_TTL = 3600
 
 
-def _zone_path(zone_name: str, prefix: PurePosixPath) -> PurePosixPath:
-    """Return etcd path from zone name. example.com. → /skydns/com/example"""
-    return prefix.joinpath(
-        *(segment for segment in reversed(zone_name.split(".")) if segment)
-    )
-
-
-def _dn_to_key(fqdn: str, prefix: PurePosixPath) -> str:
-    """Return etcd key from FQDN. www.example.com. → /skydns/example/www"""
-    path = prefix.joinpath(
-        *(segment for segment in reversed(fqdn.split(".")) if segment)
-    )
-    return str(path)
+def _name_to_key(name: str, prefix: str) -> str:
+    """Return etcd key from zone name or FQDN. example.com. → /skydns/com/example"""
+    segments = (s for s in reversed(name.split(".")) if s)
+    return str(PurePosixPath(prefix).joinpath(*segments))
 
 
 def _strip_seq(zone_parts: list[str], rest_parts: list[str]) -> list[str]:
@@ -74,11 +65,9 @@ def _strip_seq(zone_parts: list[str], rest_parts: list[str]) -> list[str]:
             return rest_parts
 
 
-def _extract_record_name(
-    key: str, zone_path: PurePosixPath, prefix: PurePosixPath
-) -> str:
+def _extract_record_name(key: str, zone_path: str, prefix: str) -> str:
     """Extract record name from etcd key; strip seq via _strip_seq, join rest in DNS order."""
-    zone_parts = zone_path.relative_to(prefix).parts
+    zone_parts = PurePosixPath(zone_path).relative_to(prefix).parts
     key_path = PurePosixPath(key)
     if not key_path.is_relative_to(zone_path):
         raise ValueError(f"key is not under zone_path: {key!r}")
@@ -89,7 +78,7 @@ def _extract_record_name(
     return ".".join(reversed(name_parts))
 
 
-def _is_reverse_key(key: str, prefix: PurePosixPath) -> bool:
+def _is_reverse_key(key: str, prefix: str) -> bool:
     """Return True if key is for reverse (arpa) zone."""
     rel = PurePosixPath(key).relative_to(prefix)
     return (
@@ -208,12 +197,11 @@ class EtcdProvider(BaseProvider):
         self.log = logging.getLogger(f"{self.__class__.__name__}[{id}]")
         super().__init__(id, **kwargs)
         self._client = client or EtcdClientWrapper(host=host, port=port)
-        self._prefix = PurePosixPath(prefix)
+        self._prefix = prefix.rstrip("/")
         self._default_ttl = default_ttl
 
     def populate(self, zone: Zone, target: bool = False, lenient: bool = False) -> bool:
-        zone_path = _zone_path(zone.name, self._prefix)
-        zone_key = str(zone_path)
+        zone_key = _name_to_key(zone.name, self._prefix)
         raw = sorted(
             self._client.get_by_prefix(zone_key.encode("utf-8")),
             key=lambda x: x[1].key,
@@ -225,7 +213,7 @@ class EtcdProvider(BaseProvider):
             try:
                 # TODO: more meaningful error handling
                 key = meta.key.decode("utf-8")
-                name = _extract_record_name(key, zone_path, self._prefix)
+                name = _extract_record_name(key, zone_key, self._prefix)
                 data = json.loads(value.decode("utf-8"))
 
                 service = Service(**data, key=key)
@@ -272,7 +260,7 @@ class EtcdProvider(BaseProvider):
         return applied
 
     def _delete_existing_records(self, existing: Record) -> int:
-        base_key = _dn_to_key(existing.fqdn, self._prefix)
+        base_key = _name_to_key(existing.fqdn, self._prefix)
         raw = self._client.get_by_prefix(base_key.encode("utf-8"))
         applied = 0
         for _, meta in raw:
@@ -292,7 +280,7 @@ class EtcdProvider(BaseProvider):
         if new._type not in self.SUPPORTS:
             self.log.warning("Unsupported record type: %s", new._type)
             return 0
-        base_key = _dn_to_key(new.fqdn, self._prefix)
+        base_key = _name_to_key(new.fqdn, self._prefix)
         self._migrate_bare_key_to_zero(base_key)
         next_idx = self._next_seq_for_name(base_key)
         services = _record_to_services(new)
@@ -323,6 +311,6 @@ class EtcdProvider(BaseProvider):
             key = meta.key.decode("utf-8")
             if key == base_key:
                 used.add(0)
-            elif (m := re.match(re.escape(base_key) + r"/(\d+)", key)):
+            elif m := re.match(re.escape(base_key) + r"/(\d+)", key):
                 used.add(int(m.group(1)))
         return max(used) + 1 if used else 0

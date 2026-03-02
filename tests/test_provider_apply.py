@@ -147,7 +147,7 @@ class TestCreateNewRecords:
 
         provider._create_new_records(record)
 
-        # _dn_to_key: FQDN split by ".", reversed → arpa/ip6/0/.../0/1 (31 zeros + 1). No seq for single record.
+        # _name_to_key: FQDN split by ".", reversed → arpa/ip6/0/.../0/1 (31 zeros + 1). No seq for single record.
         base = "/skydns/arpa/ip6/" + "0/" * 31 + "1"
         assert client.data == {base: {"host": "ptr.example.com.", "ttl": 60}}
 
