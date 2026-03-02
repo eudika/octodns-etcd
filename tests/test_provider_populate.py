@@ -299,6 +299,28 @@ class TestEtcdProviderPopulateARecord:
         assert by_name["app"] == ["192.168.1.10"]
         assert by_name["www"] == ["192.168.1.20"]
 
+    def test_populate_app2_and_app10_in_natural_order(self) -> None:
+        """Populate calls add_record in natural key order (app2 before app10)."""
+        class ZoneSpy(Zone):
+            def __init__(self, name: str, sub_zones: list) -> None:
+                super().__init__(name, sub_zones)
+                self.add_record_order: list[str] = []
+
+            def add_record(self, record, *args: object, **kwargs: object) -> None:
+                self.add_record_order.append(record.name)
+                super().add_record(record, *args, **kwargs)
+
+        zone = ZoneSpy("example.com.", [])
+        client = DictEtcdClient(
+            {
+                "/skydns/com/example/app10": {"host": "192.168.1.10", "ttl": 300},
+                "/skydns/com/example/app2": {"host": "192.168.1.2", "ttl": 300},
+            }
+        )
+        provider = EtcdProvider("etcd", client=client)
+        provider.populate(zone, target=False, lenient=False)
+        assert zone.add_record_order == ["app2", "app10"]
+
 
 class TestEtcdProviderPopulateOtherTypes:
     """populate: record types other than A (AAAA, TXT, CNAME, MX, SRV)."""

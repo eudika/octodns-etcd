@@ -12,6 +12,7 @@ from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 from etcd3.exceptions import Etcd3Exception
+from natsort import natsorted
 from octodns.provider.base import BaseProvider
 from octodns.record import Record
 from pydantic import ValidationError
@@ -202,9 +203,9 @@ class EtcdProvider(BaseProvider):
 
     def populate(self, zone: Zone, target: bool = False, lenient: bool = False) -> bool:
         zone_key = _name_to_key(zone.name, self._prefix)
-        raw = sorted(
+        raw = natsorted(
             self._client.get_by_prefix(zone_key.encode("utf-8")),
-            key=lambda x: x[1].key,
+            key=lambda x: x[1].key.decode("utf-8"),
         )
 
         # Group by (dns_type, record name)
